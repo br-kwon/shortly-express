@@ -2,6 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var session = require('express-session')
 
 
 var db = require('./app/config');
@@ -16,59 +17,75 @@ var app = express();
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 app.use(partials());
+app.use(session({
+  secret: 'keyboard cat'
+}));
 // Parse JSON (uniform resource locators)
 app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+var sessions = [];
+var checkUser = function(sessionId, res, callback) {
+  if (sessions.indexOf(sessionId) > -1) callback();
+  else res.redirect('/login');
+};
 
 app.get('/', 
 function(req, res) {
-  res.render('index');
+  checkUser(req.sessionID, res, function() {
+    res.render('index');
+  });
 });
 
 app.get('/create', 
 function(req, res) {
-  res.render('index');
+  checkUser(req.sessionID, res, function() {
+    res.render('index');
+  });
 });
 
 app.get('/links', 
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.send(200, links.models);
+  checkUser(req.sessionID, res, function() {
+    Links.reset().fetch().then(function(links) {
+      res.send(200, links.models);
+    });
   });
 });
 
 app.post('/links', 
 function(req, res) {
-  var uri = req.body.url;
+  checkUser(req.sessionID, res, function() {
+    var uri = req.body.url;
 
-  if (!util.isValidUrl(uri)) {
-    // console.log('Not a valid url: ', uri);
-    return res.send(404);
-  }
-
-  new Link({ url: uri }).fetch().then(function(found) {
-    if (found) {
-      res.send(200, found.attributes);
-    } else {
-      util.getUrlTitle(uri, function(err, title) {
-        if (err) {
-          console.log('Error reading URL heading: ', err);
-          return res.send(404);
-        }
-
-        Links.create({
-          url: uri,
-          title: title,
-          base_url: req.headers.origin
-        })
-        .then(function(newLink) {
-          res.send(200, newLink);
-        });
-      });
+    if (!util.isValidUrl(uri)) {
+      // console.log('Not a valid url: ', uri);
+      return res.send(404);
     }
+
+    new Link({ url: uri }).fetch().then(function(found) {
+      if (found) {
+        res.send(200, found.attributes);
+      } else {
+        util.getUrlTitle(uri, function(err, title) {
+          if (err) {
+            console.log('Error reading URL heading: ', err);
+            return res.send(404);
+          }
+
+          Links.create({
+            url: uri,
+            title: title,
+            base_url: req.headers.origin
+          })
+          .then(function(newLink) {
+            res.send(200, newLink);
+          });
+        });
+      }
+    });
   });
 });
 
@@ -86,6 +103,15 @@ function(req, res) {
   res.render('signup');
 });
 
+var regenerateAndStoreSession = function(req, callback) {
+  req.session.regenerate(function(err){
+    if (!err) {
+      sessions.push(req.sessionID);
+      callback();       
+    }
+  });
+};
+
 app.post('/login',
 function(req, res) {
   db.knex('users')
@@ -94,7 +120,9 @@ function(req, res) {
         if (data.length === 0) {
           res.redirect('/login');
         } else if (req.body.password === data[0].password) {
-          res.redirect('/');
+          regenerateAndStoreSession(req, function(){
+            res.redirect('/');
+          });
         } else {
           res.redirect('/login');
         }
@@ -109,7 +137,9 @@ function(req, res) {
     'username': req.body.username,
     'password': req.body.password
   }).save().then(function(data) {
-    res.redirect('/');
+    regenerateAndStoreSession(req, function(){ 
+      res.redirect('/');
+    });
   }).catch(function(err) { res.send(500); }); 
 });
 
