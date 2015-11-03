@@ -2,7 +2,8 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-var session = require('express-session')
+var session = require('express-session');
+var bcrypt = require('bcrypt-nodejs');
 
 
 var db = require('./app/config');
@@ -119,16 +120,21 @@ function(req, res) {
       .then(function(data) {
         if (data.length === 0) {
           res.redirect('/login');
-        } else if (req.body.password === data[0].password) {
-          regenerateAndStoreSession(req, function(){
-            res.redirect('/');
-          });
-        } else {
-          res.redirect('/login');
+        } else { 
+          bcrypt.compare(req.body.password, data[0].hash, function(err, matches){
+            if (matches) {
+              regenerateAndStoreSession(req, function(){
+                res.redirect('/');
+              }); 
+            } else {
+              res.redirect('/login');
+            }
+          }); 
         }
       })
-      .catch(function(err) { 
-        res.send(500); }) 
+      .catch(function(err) {
+        res.send(500); 
+      }) 
 });
 
 app.post('/signup',
