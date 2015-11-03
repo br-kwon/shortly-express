@@ -26,9 +26,9 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
-var sessions = [];
+var sessions = {};
 var checkUser = function(sessionId, res, callback) {
-  if (sessions.indexOf(sessionId) > -1) callback();
+  if (sessions[sessionId]) callback();
   else res.redirect('/login');
 };
 
@@ -106,7 +106,7 @@ function(req, res) {
 var regenerateAndStoreSession = function(req, callback) {
   req.session.regenerate(function(err){
     if (!err) {
-      sessions.push(req.sessionID);
+      sessions[req.sessionID] = true;
       callback();       
     }
   });
@@ -141,6 +141,12 @@ function(req, res) {
       res.redirect('/');
     });
   }).catch(function(err) { res.send(500); }); 
+});
+
+app.post('/logout',
+function(req, res) {
+  delete sessions[req.sessionID];
+  res.redirect('/login');
 });
 
 /************************************************************/
