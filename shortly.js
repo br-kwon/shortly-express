@@ -45,7 +45,7 @@ function(req, res) {
   var uri = req.body.url;
 
   if (!util.isValidUrl(uri)) {
-    console.log('Not a valid url: ', uri);
+    // console.log('Not a valid url: ', uri);
     return res.send(404);
   }
 
@@ -91,13 +91,16 @@ function(req, res) {
   db.knex('users')
       .where('username', '=', req.body.username)
       .then(function(data) {
-        if (req.body.password === data[0].password) {
+        if (data.length === 0) {
+          res.redirect('/login');
+        } else if (req.body.password === data[0].password) {
           res.redirect('/');
         } else {
-          res.send(401);
+          res.redirect('/login');
         }
       })
-      .catch(function(err) { res.send(500); }) 
+      .catch(function(err) { 
+        res.send(500); }) 
 });
 
 app.post('/signup',
