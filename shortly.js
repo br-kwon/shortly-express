@@ -3,7 +3,6 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
-var bcrypt = require('bcrypt-nodejs');
 
 
 var db = require('./app/config');
@@ -115,39 +114,50 @@ var regenerateAndStoreSession = function(req, callback) {
 
 app.post('/login',
 function(req, res) {
-  db.knex('users')
-      .where('username', '=', req.body.username)
-      .then(function(data) {
-        if (data.length === 0) {
-          res.redirect('/login');
-        } else { 
-          bcrypt.compare(req.body.password, data[0].hash, function(err, matches){
-            if (matches) {
-              regenerateAndStoreSession(req, function(){
-                res.redirect('/');
-              }); 
-            } else {
-              res.redirect('/login');
-            }
-          }); 
-        }
-      })
-      .catch(function(err) {
-        res.send(500); 
-      }) 
+  new User({username: req.body.username})
+    .fetch()
+    .then(function(user) {
+      if (!user) {
+        res.redirect('/login');
+      } else {
+        user.comparePassword(req.body.password, function(err, matches){
+          if (matches) {
+            regenerateAndStoreSession(req, function(){
+              res.redirect('/');
+            }); 
+          } else {
+            res.redirect('/login');
+          }
+        }); 
+      }
+    })
+    .catch(function(err) {
+      res.send(500); 
+    });
 });
 
 app.post('/signup',
 function(req, res) {
-  var newUser = new User({
-    'username': req.body.username,
-    'password': req.body.password
-  }).save().then(function(data) {
-    regenerateAndStoreSession(req, function(){ 
-      res.redirect('/');
-    });
-  }).catch(function(err) { res.send(500); }); 
+  new User({username: req.body.username})
+    .fetch()
+    .then(function(user){
+      if (user) {
+        res.redirect('/login');
+      } else {
+        var newUser = new User({
+          'username': req.body.username,
+          'password': req.body.password
+        }).save()
+          .then(function(data) {
+            regenerateAndStoreSession(req, function(){ 
+              res.redirect('/');
+            });
+          })
+        }
+      })
+    .catch(function(err) { res.send(500); }); 
 });
+
 
 app.post('/logout',
 function(req, res) {
