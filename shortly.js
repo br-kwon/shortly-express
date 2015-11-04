@@ -3,6 +3,8 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var passport = require('passport');
+var GitHubStrategy = require('passport-github2').Strategy;
 
 
 var db = require('./app/config');
@@ -26,38 +28,41 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+app.use(passport.initialize());
+app.use(passport.session());
+
 var sessions = {};
 var checkUser = function(sessionId, res, callback) {
   if (sessions[sessionId]) callback();
   else res.redirect('/login');
 };
 
-app.get('/', 
+app.get('/', ensureAuthenticated,
 function(req, res) {
-  checkUser(req.sessionID, res, function() {
+  // checkUser(req.sessionID, res, function() {
     res.render('index');
-  });
+  // });
 });
 
-app.get('/create', 
+app.get('/create', ensureAuthenticated,
 function(req, res) {
-  checkUser(req.sessionID, res, function() {
+  // checkUser(req.sessionID, res, function() {
     res.render('index');
-  });
+  // });
 });
 
-app.get('/links', 
+app.get('/links', ensureAuthenticated,
 function(req, res) {
-  checkUser(req.sessionID, res, function() {
+  // checkUser(req.sessionID, res, function() {
     Links.reset().fetch().then(function(links) {
       res.send(200, links.models);
     });
-  });
+  // });
 });
 
-app.post('/links', 
+app.post('/links', ensureAuthenticated,
 function(req, res) {
-  checkUser(req.sessionID, res, function() {
+  // checkUser(req.sessionID, res, function() {
     var uri = req.body.url;
 
     if (!util.isValidUrl(uri)) {
@@ -86,7 +91,7 @@ function(req, res) {
         });
       }
     });
-  });
+  // });
 });
 
 /************************************************************/
@@ -98,70 +103,109 @@ function(req, res) {
   res.render('login');
 });
 
-app.get('/signup', 
-function(req, res) {
-  res.render('signup');
+var GITHUB_CLIENT_ID = "c9d22c28df3aed2dddc4";
+var GITHUB_CLIENT_SECRET = "9d8d0d1c3e2d917b0cbacb5bfc1a87bcb7f1dce3";
+
+passport.serializeUser(function(user, done) {
+  done(null, user);
 });
 
-var regenerateAndStoreSession = function(req, callback) {
-  req.session.regenerate(function(err){
-    if (!err) {
-      sessions[req.sessionID] = true;
-      callback();       
-    }
+passport.deserializeUser(function(obj, done) {
+  done(null, obj);
+});
+
+passport.use(new GitHubStrategy({
+    clientID: GITHUB_CLIENT_ID,
+    clientSecret: GITHUB_CLIENT_SECRET,
+    callbackURL: "http://127.0.0.1:4568/auth/github/callback"
+  },
+  function(accessToken, refreshToken, profile, done) {
+    // User.findOrCreate({ githubId: profile.id }, function (err, user) {
+      return done(null, profile);
+    // });
+  }
+));
+
+app.get('/auth/github',
+  passport.authenticate('github', { scope: [ 'user:email' ] }),
+  function(req, res){
   });
+
+app.get('/auth/github/callback', 
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  function(req, res) {
+    res.redirect('/');
+  });
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) { return next(); }
+  res.redirect('/login')
 };
+// app.get('/signup', 
+// function(req, res) {
+//   res.render('signup');
+// });
 
-app.post('/login',
-function(req, res) {
-  new User({username: req.body.username})
-    .fetch()
-    .then(function(user) {
-      if (!user) {
-        res.redirect('/login');
-      } else {
-        user.comparePassword(req.body.password, function(err, matches){
-          if (matches) {
-            regenerateAndStoreSession(req, function(){
-              res.redirect('/');
-            }); 
-          } else {
-            res.redirect('/login');
-          }
-        }); 
-      }
-    })
-    .catch(function(err) {
-      res.send(500); 
-    });
-});
+// var regenerateAndStoreSession = function(req, callback) {
+//   req.session.regenerate(function(err){
+//     if (!err) {
+//       sessions[req.sessionID] = true;
+//       callback();       
+//     }
+//   });
+// };
 
-app.post('/signup',
-function(req, res) {
-  new User({username: req.body.username})
-    .fetch()
-    .then(function(user){
-      if (user) {
-        res.redirect('/login');
-      } else {
-        var newUser = new User({
-          'username': req.body.username,
-          'password': req.body.password
-        }).save()
-          .then(function(data) {
-            regenerateAndStoreSession(req, function(){ 
-              res.redirect('/');
-            });
-          })
-        }
-      })
-    .catch(function(err) { res.send(500); }); 
-});
+// app.post('/login',
+// function(req, res) {
+//   new User({username: req.body.username})
+//     .fetch()
+//     .then(function(user) {
+//       if (!user) {
+//         res.redirect('/login');
+//       } else {
+//         user.comparePassword(req.body.password, function(err, matches){
+//           if (matches) {
+//             regenerateAndStoreSession(req, function(){
+//               res.redirect('/');
+//             }); 
+//           } else {
+//             res.redirect('/login');
+//           }
+//         }); 
+//       }
+//     })
+//     .catch(function(err) {
+//       res.send(500); 
+//     });
+// });
+
+// app.post('/signup',
+// function(req, res) {
+//   new User({username: req.body.username})
+//     .fetch()
+//     .then(function(user){
+//       if (user) {
+//         res.redirect('/login');
+//       } else {
+//         var newUser = new User({
+//           'username': req.body.username,
+//           'password': req.body.password
+//         }).save()
+//           .then(function(data) {
+//             regenerateAndStoreSession(req, function(){ 
+//               res.redirect('/');
+//             });
+//           })
+//         }
+//       })
+//     .catch(function(err) { res.send(500); }); 
+// });
 
 
 app.post('/logout',
 function(req, res) {
-  delete sessions[req.sessionID];
+  req.logout();
+  // delete sessions[req.sessionID];
   res.redirect('/login');
 });
 
